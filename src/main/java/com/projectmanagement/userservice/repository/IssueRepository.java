@@ -19,4 +19,5 @@ public interface IssueRepository extends JpaRepository<Issue, Long> {
     List<Issue> findByDueDateBefore(LocalDateTime date);
     List<Issue> findByWorkListAndStatus(WorkList workList, IssueStatus status);
     List<Issue> findByParentIssue(Issue parentIssue);
+    List<Issue> findBySprint_Id(Long sprintId);
 }

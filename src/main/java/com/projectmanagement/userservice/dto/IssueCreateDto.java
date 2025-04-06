@@ -34,4 +34,9 @@ public class IssueCreateDto {
     private Long estimatedHours;
     
     private List<Long> labelIds;
+    
+    // Các trường mới cho Sprint và Story Points
+    private Integer storyPoints;
+    
+    private Long sprintId;
 }

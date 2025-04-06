@@ -39,6 +39,8 @@ public class Issue {
     
     private Long estimatedHours;
     
+    private Integer storyPoints;
+    
     @ManyToOne
     @JoinColumn(name = "worklist_id", nullable = false)
     private WorkList workList;
@@ -58,11 +60,18 @@ public class Issue {
     @JoinColumn(name = "parent_issue_id")
     private Issue parentIssue;
     
+    @ManyToOne
+    @JoinColumn(name = "sprint_id")
+    private Sprint sprint;
+    
     @OneToMany(mappedBy = "issue", cascade = CascadeType.ALL)
     private List<Comment> comments;
     
     @OneToMany(mappedBy = "issue", cascade = CascadeType.ALL)
     private List<Attachment> attachments;
+    
+    @OneToMany(mappedBy = "issue", cascade = CascadeType.ALL)
+    private List<WorkLog> workLogs;
     
     @ManyToMany
     @JoinTable(

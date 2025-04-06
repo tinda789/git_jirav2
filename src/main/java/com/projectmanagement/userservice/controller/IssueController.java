@@ -6,15 +6,12 @@ import com.projectmanagement.userservice.dto.MessageResponse;
 import com.projectmanagement.userservice.entity.*;
 import com.projectmanagement.userservice.service.AuthService;
 import com.projectmanagement.userservice.service.IssueService;
-import com.projectmanagement.userservice.service.UserService;
-import com.projectmanagement.userservice.service.WorkListService;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -25,12 +22,6 @@ public class IssueController {
 
     @Autowired
     private IssueService issueService;
-    
-    @Autowired
-    private WorkListService workListService;
-    
-    @Autowired
-    private UserService userService;
     
     @Autowired
     private AuthService authService;
@@ -48,15 +39,49 @@ public class IssueController {
     @GetMapping("/worklist/{workListId}")
     @PreAuthorize("@securityService.canManageWorkList(#workListId, principal)")
     public ResponseEntity<?> getIssuesByWorkList(@PathVariable Long workListId) {
-        return workListService.getWorkListById(workListId)
-                .map(workList -> {
-                    List<Issue> issues = issueService.getIssuesByWorkList(workList);
-                    List<IssueDto> issueDtos = issues.stream()
-                            .map(this::convertToDto)
-                            .collect(Collectors.toList());
-                    return ResponseEntity.ok(issueDtos);
-                })
-                .orElse(ResponseEntity.notFound().build());
+        List<Issue> issues = issueService.getIssuesByWorkListId(workListId);
+        if (issues == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        List<IssueDto> issueDtos = issues.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(issueDtos);
+    }
+    
+    @GetMapping("/sprint/{sprintId}")
+    @PreAuthorize("@securityService.canManageSprint(#sprintId, principal)")
+    public ResponseEntity<?> getIssuesBySprint(@PathVariable Long sprintId) {
+        List<Issue> issues = issueService.getIssuesBySprintId(sprintId);
+        if (issues == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        List<IssueDto> issueDtos = issues.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(issueDtos);
+    }
+    
+    @GetMapping("/assigned")
+    public ResponseEntity<List<IssueDto>> getAssignedIssues() {
+        User currentUser = authService.getCurrentUser();
+        List<Issue> issues = issueService.getIssuesByAssignee(currentUser);
+        List<IssueDto> issueDtos = issues.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(issueDtos);
+    }
+    
+    @GetMapping("/reported")
+    public ResponseEntity<List<IssueDto>> getReportedIssues() {
+        User currentUser = authService.getCurrentUser();
+        List<Issue> issues = issueService.getIssuesByReporter(currentUser);
+        List<IssueDto> issueDtos = issues.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(issueDtos);
     }
     
     @GetMapping("/{id}")
@@ -67,144 +92,136 @@ public class IssueController {
                 .orElse(ResponseEntity.notFound().build());
     }
     
+    @GetMapping("/{id}/sub-issues")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> getSubIssues(@PathVariable Long id) {
+        List<Issue> subIssues = issueService.getSubIssues(id);
+        if (subIssues == null) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        List<IssueDto> subIssueDtos = subIssues.stream()
+                .map(this::convertToDto)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(subIssueDtos);
+    }
+    
     @PostMapping
     public ResponseEntity<?> createIssue(@Valid @RequestBody IssueCreateDto issueDto) {
         User currentUser = authService.getCurrentUser();
         
-        return workListService.getWorkListById(issueDto.getWorkListId())
-                .map(workList -> {
-                    // Kiểm tra quyền tạo issue trong worklist
-                    if (!workListService.isWorkListMember(currentUser, workList) && 
-                        !workListService.isWorkListLead(currentUser, workList)) {
-                        return ResponseEntity.badRequest()
-                                .body(new MessageResponse("You don't have permission to create issues in this worklist"));
-                    }
-                    
-                    Issue issue = new Issue();
-                    issue.setTitle(issueDto.getTitle());
-                    issue.setDescription(issueDto.getDescription());
-                    issue.setType(issueDto.getType());
-                    issue.setPriority(issueDto.getPriority());
-                    issue.setWorkList(workList);
-                    issue.setReporter(currentUser);
-                    
-                    // Thiết lập assignee nếu có
-                    if (issueDto.getAssigneeId() != null) {
-                        userService.getUserById(issueDto.getAssigneeId())
-                                .ifPresent(issue::setAssignee);
-                    }
-                    
-                    // Thiết lập parent issue nếu có
-                    if (issueDto.getParentIssueId() != null) {
-                        issueService.getIssueById(issueDto.getParentIssueId())
-                                .ifPresent(issue::setParentIssue);
-                    }
-                    
-                    if (issueDto.getDueDate() != null) {
-                        issue.setDueDate(issueDto.getDueDate());
-                    }
-                    
-                    issue.setEstimatedHours(issueDto.getEstimatedHours());
-                    
-                    // Thiết lập labels nếu có
-                    if (issueDto.getLabelIds() != null && !issueDto.getLabelIds().isEmpty()) {
-                        issue.setLabels(new ArrayList<>());
-                        // Xử lý labels sẽ được triển khai khi có LabelService
-                    }
-                    
-                    Issue savedIssue = issueService.createIssue(issue);
-                    return ResponseEntity.ok(convertToDto(savedIssue));
-                })
-                .orElse(ResponseEntity.badRequest().body(new MessageResponse("WorkList not found")));
-   }
+        try {
+            Issue savedIssue = issueService.createNewIssue(issueDto, currentUser);
+            return ResponseEntity.ok(convertToDto(savedIssue));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
    
-   @PutMapping("/{id}")
-   @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
-   public ResponseEntity<?> updateIssue(@PathVariable Long id, @Valid @RequestBody IssueDto issueDto) {
-       return issueService.getIssueById(id)
-               .map(issue -> {
-                   issue.setTitle(issueDto.getTitle());
-                   if (issueDto.getDescription() != null) {
-                       issue.setDescription(issueDto.getDescription());
-                   }
-                   
-                   if (issueDto.getType() != null) {
-                       issue.setType(issueDto.getType());
-                   }
-                   
-                   if (issueDto.getPriority() != null) {
-                       issue.setPriority(issueDto.getPriority());
-                   }
-                   
-                   if (issueDto.getStatus() != null) {
-                       issue.setStatus(issueDto.getStatus());
-                   }
-                   
-                   if (issueDto.getAssigneeId() != null) {
-                       userService.getUserById(issueDto.getAssigneeId())
-                               .ifPresent(issue::setAssignee);
-                   }
-                   
-                   if (issueDto.getDueDate() != null) {
-                       issue.setDueDate(issueDto.getDueDate());
-                   }
-                   
-                   if (issueDto.getEstimatedHours() != null) {
-                       issue.setEstimatedHours(issueDto.getEstimatedHours());
-                   }
-                   
-                   // Cập nhật labels nếu có sự thay đổi
-                   // Sẽ được triển khai khi có LabelService
-                   
-                   Issue updatedIssue = issueService.updateIssue(issue);
-                   return ResponseEntity.ok(convertToDto(updatedIssue));
-               })
-               .orElse(ResponseEntity.notFound().build());
-   }
+    @PutMapping("/{id}")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> updateIssue(@PathVariable Long id, @Valid @RequestBody IssueDto issueDto) {
+        User currentUser = authService.getCurrentUser();
+        
+        try {
+            Issue updatedIssue = issueService.updateExistingIssue(id, issueDto, currentUser);
+            return ResponseEntity.ok(convertToDto(updatedIssue));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
    
-   @DeleteMapping("/{id}")
-   @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
-   public ResponseEntity<?> deleteIssue(@PathVariable Long id) {
-       if (!issueService.getIssueById(id).isPresent()) {
-           return ResponseEntity.notFound().build();
-       }
-       
-       issueService.deleteIssue(id);
-       return ResponseEntity.ok(new MessageResponse("Issue deleted successfully"));
-   }
+    @PatchMapping("/{id}/status")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> updateIssueStatus(
+            @PathVariable Long id, 
+            @RequestParam IssueStatus status) {
+        User currentUser = authService.getCurrentUser();
+        
+        try {
+            Issue updatedIssue = issueService.updateIssueStatus(id, status, currentUser);
+            return ResponseEntity.ok(convertToDto(updatedIssue));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
    
-   private IssueDto convertToDto(Issue issue) {
-       IssueDto dto = new IssueDto();
-       dto.setId(issue.getId());
-       dto.setTitle(issue.getTitle());
-       dto.setDescription(issue.getDescription());
-       dto.setType(issue.getType());
-       dto.setPriority(issue.getPriority());
-       dto.setStatus(issue.getStatus());
-       dto.setCreatedDate(issue.getCreatedDate());
-       dto.setDueDate(issue.getDueDate());
-       dto.setEstimatedHours(issue.getEstimatedHours());
-       dto.setWorkListId(issue.getWorkList().getId());
+    @PatchMapping("/{id}/assignee")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> updateIssueAssignee(
+            @PathVariable Long id, 
+            @RequestParam(required = false) Long assigneeId) {
+        User currentUser = authService.getCurrentUser();
+        
+        try {
+            Issue updatedIssue = issueService.updateIssueAssignee(id, assigneeId, currentUser);
+            return ResponseEntity.ok(convertToDto(updatedIssue));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+   
+    @PatchMapping("/{id}/sprint")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> updateIssueSprint(
+            @PathVariable Long id, 
+            @RequestParam(required = false) Long sprintId) {
+        try {
+            Issue updatedIssue = issueService.updateIssueSprint(id, sprintId);
+            return ResponseEntity.ok(convertToDto(updatedIssue));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+   
+    @DeleteMapping("/{id}")
+    @PreAuthorize("@securityService.canModifyIssue(#id, principal)")
+    public ResponseEntity<?> deleteIssue(@PathVariable Long id) {
+        try {
+            issueService.deleteIssue(id);
+            return ResponseEntity.ok(new MessageResponse("Issue deleted successfully"));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(new MessageResponse(e.getMessage()));
+        }
+    }
+   
+    private IssueDto convertToDto(Issue issue) {
+        IssueDto dto = new IssueDto();
+        dto.setId(issue.getId());
+        dto.setTitle(issue.getTitle());
+        dto.setDescription(issue.getDescription());
+        dto.setType(issue.getType());
+        dto.setPriority(issue.getPriority());
+        dto.setStatus(issue.getStatus());
+        dto.setCreatedDate(issue.getCreatedDate());
+        dto.setDueDate(issue.getDueDate());
+        dto.setEstimatedHours(issue.getEstimatedHours());
+        dto.setStoryPoints(issue.getStoryPoints());
+        dto.setWorkListId(issue.getWorkList().getId());
        
-       if (issue.getReporter() != null) {
-           dto.setReporterId(issue.getReporter().getId());
-       }
+        if (issue.getReporter() != null) {
+            dto.setReporterId(issue.getReporter().getId());
+        }
        
-       if (issue.getAssignee() != null) {
-           dto.setAssigneeId(issue.getAssignee().getId());
-       }
+        if (issue.getAssignee() != null) {
+            dto.setAssigneeId(issue.getAssignee().getId());
+        }
        
-       if (issue.getParentIssue() != null) {
-           dto.setParentIssueId(issue.getParentIssue().getId());
-       }
+        if (issue.getParentIssue() != null) {
+            dto.setParentIssueId(issue.getParentIssue().getId());
+        }
        
-       if (issue.getLabels() != null) {
-           List<Long> labelIds = issue.getLabels().stream()
-                   .map(Label::getId)
-                   .collect(Collectors.toList());
-           dto.setLabelIds(labelIds);
-       }
+        if (issue.getSprint() != null) {
+            dto.setSprintId(issue.getSprint().getId());
+        }
        
-       return dto;
-   }
+        if (issue.getLabels() != null) {
+            List<Long> labelIds = issue.getLabels().stream()
+                    .map(Label::getId)
+                    .collect(Collectors.toList());
+            dto.setLabelIds(labelIds);
+        }
+       
+        return dto;
+    }
 }

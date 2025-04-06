@@ -17,6 +17,9 @@ public class SecurityService {
     private final BoardColumnRepository boardColumnRepository;
     private final CommentRepository commentRepository;
     private final AttachmentRepository attachmentRepository;
+    private final SprintRepository sprintRepository;
+    private final WorkLogRepository workLogRepository;
+    private final AutomationRuleRepository automationRuleRepository;
     
     @Autowired
     public SecurityService(
@@ -26,7 +29,10 @@ public class SecurityService {
             BoardRepository boardRepository,
             BoardColumnRepository boardColumnRepository,
             CommentRepository commentRepository,
-            AttachmentRepository attachmentRepository) {
+            AttachmentRepository attachmentRepository,
+            SprintRepository sprintRepository,
+            WorkLogRepository workLogRepository,
+            AutomationRuleRepository automationRuleRepository) {
         this.workspaceRepository = workspaceRepository;
         this.workListRepository = workListRepository;
         this.issueRepository = issueRepository;
@@ -34,6 +40,9 @@ public class SecurityService {
         this.boardColumnRepository = boardColumnRepository;
         this.commentRepository = commentRepository;
         this.attachmentRepository = attachmentRepository;
+        this.sprintRepository = sprintRepository;
+        this.workLogRepository = workLogRepository;
+        this.automationRuleRepository = automationRuleRepository;
     }
     
     // Workspace security
@@ -122,6 +131,52 @@ public class SecurityService {
                isWorkspaceOwner(attachment.getIssue().getWorkList().getWorkspace().getId(), user) ||
                isWorkListLead(attachment.getIssue().getWorkList().getId(), user) ||
                attachment.getUploader().getId().equals(user.getId());
+    }
+    
+    // Sprint security
+    public boolean canManageSprint(Long sprintId, User user) {
+        Optional<Sprint> sprintOpt = sprintRepository.findById(sprintId);
+        if (sprintOpt.isEmpty()) {
+            return false;
+        }
+        
+        Sprint sprint = sprintOpt.get();
+        
+        // Admin, workspace owner hoặc worklist lead có thể quản lý sprint
+        return hasAdminRole(user) ||
+               isWorkspaceOwner(sprint.getWorkList().getWorkspace().getId(), user) ||
+               isWorkListLead(sprint.getWorkList().getId(), user);
+    }
+    
+    // WorkLog security
+    public boolean canManageWorkLog(Long workLogId, User user) {
+        Optional<WorkLog> workLogOpt = workLogRepository.findById(workLogId);
+        if (workLogOpt.isEmpty()) {
+            return false;
+        }
+        
+        WorkLog workLog = workLogOpt.get();
+        
+        // Admin, workspace owner, worklist lead hoặc người tạo workLog có thể quản lý
+        return hasAdminRole(user) ||
+               isWorkspaceOwner(workLog.getIssue().getWorkList().getWorkspace().getId(), user) ||
+               isWorkListLead(workLog.getIssue().getWorkList().getId(), user) ||
+               workLog.getUser().getId().equals(user.getId());
+    }
+    
+    // Automation Rule security
+    public boolean canManageAutomationRule(Long ruleId, User user) {
+        Optional<AutomationRule> ruleOpt = automationRuleRepository.findById(ruleId);
+        if (ruleOpt.isEmpty()) {
+            return false;
+        }
+        
+        AutomationRule rule = ruleOpt.get();
+        
+        // Admin, workspace owner hoặc worklist lead có thể quản lý automation rule
+        return hasAdminRole(user) ||
+               isWorkspaceOwner(rule.getWorkList().getWorkspace().getId(), user) ||
+               isWorkListLead(rule.getWorkList().getId(), user);
     }
     
     // Helper methods

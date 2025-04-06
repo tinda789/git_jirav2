@@ -32,6 +32,8 @@ public class IssueDto {
     
     private Long estimatedHours;
     
+    private Integer storyPoints;
+    
     private Long workListId;
     
     private Long reporterId;
@@ -39,6 +41,8 @@ public class IssueDto {
     private Long assigneeId;
     
     private Long parentIssueId;
+    
+    private Long sprintId;
     
     private List<Long> labelIds;
 }
