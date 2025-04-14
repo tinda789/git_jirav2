@@ -29,8 +29,6 @@ public class SprintController {
     @Autowired
     private WorkListService workListService;
     
-    @Autowired
-    
     @GetMapping("/worklist/{workListId}")
     @PreAuthorize("@securityService.canManageWorkList(#workListId, principal)")
     public ResponseEntity<?> getSprintsByWorkList(@PathVariable Long workListId) {

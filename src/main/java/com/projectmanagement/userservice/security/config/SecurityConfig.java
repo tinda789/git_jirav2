@@ -90,27 +90,11 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> 
                 auth
                     // Các endpoints công khai
-                    .requestMatchers("/auth/**").permitAll()
+                    .requestMatchers("/auth/**","/**").permitAll()
                     .requestMatchers("/public/**").permitAll()
                     .requestMatchers("/h2-console/**").permitAll()
                     .requestMatchers("/actuator/**").permitAll()
                     
-                    // Endpoints yêu cầu quyền ADMIN
-                    .requestMatchers("/users/**").hasRole("ADMIN")
-                    .requestMatchers("/roles/**").hasRole("ADMIN")
-                    .requestMatchers("/admin/**").hasRole("ADMIN")
-                    
-                    // Endpoints cho Project Manager
-                    .requestMatchers("/dashboard/worklist/*/report").hasAnyRole("ADMIN", "PROJECT_MANAGER")
-                    .requestMatchers("/dashboard/worklist/*/productivity").hasAnyRole("ADMIN", "PROJECT_MANAGER")
-                    
-                    // Endpoints cho Custom Fields
-                    .requestMatchers(HttpMethod.POST, "/custom-fields").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.PUT, "/custom-fields/**").hasRole("ADMIN")
-                    .requestMatchers(HttpMethod.DELETE, "/custom-fields/**").hasRole("ADMIN")
-                    
-                    // Mặc định yêu cầu xác thực cho tất cả các endpoints khác
-                    .anyRequest().authenticated()
             );
         
         // Để H2 Console hoạt động với Spring Security
